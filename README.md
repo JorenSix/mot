@@ -1,3 +1,5 @@
+![mot build](https://github.com/JorenSix/mot/actions/workflows/build.yml/badge.svg "Build mot")
+
 
 mot - MIDI and OSC Tools
 ------------------------
@@ -73,18 +75,19 @@ mot osc_echo 127.0.0.1:6666
 
 ### MIDI to OSC bridge
 
-This application sends incoming MIDI messages over OSC to an OSC receiver. This is ideal if you want to send MIDI messages over the network.
+This application sends incoming MIDI messages over OSC to an OSC receiver. This is ideal if you want to send MIDI messages over the network. 
+
+It also allows to create a virtual MIDI port. This can be usefull e.g. to send messages from a browser window, over MIDI, to a network. If mot is running, a browser can send messages to a virtual port which is then translated to UDP messages on a network.
 
 ~~~~~~
-mot midi_to_osc 127.0.0.1:6666 /midi_transport 0
+mot midi_to_osc 127.0.0.1:5566 /midi_transport 6666
 ~~~~~~
 
 ### MIDI round-trip latency
 
-This application sends out a MIDI message as quickly as possible when a MIDI message is received. It can be used to measure MIDI round-trip latency if it is used together with the Teensy patch in the `misc` directory. 
+This application sends out a MIDI message as quickly as possible when a MIDI message is received. It can be used to measure MIDI round-trip latency if it is used together with the Teensy patch in the `misc` directory.  If all goes wel a relatively constanc round-trip latency of less than 1m should be no problem. An example on macOS can be seen below: 
 
 ![MIDI round trip latency](misc/round_trip.webp "Round_trip latency measurement")
-
 
 
 ## Credits

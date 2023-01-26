@@ -1,5 +1,7 @@
 use midir::{MidiOutput,MidiInput, Ignore,MidiOutputConnection};
 
+use midir::os::unix::{VirtualInput};
+
 use std::io::stdin;
 
 pub struct MidiIn {
@@ -21,21 +23,30 @@ impl MidiIn {
     }
 
     pub fn listen<F,T: 'static +  Send>(self, callback: F,data: T,)  where F: FnMut(u64, &[u8], &mut T) + Send + 'static {
-    	let in_ports = self.midi_in.ports();
-    	let in_port = &in_ports[self.midi_in_index];
+    	
+    	let _conn_in =  match self.midi_in_index {
+    		6666 => {
+    			println!("#Receiving MIDI from virtual mot port");
+    			self.midi_in.create_virtual("mot virtual port", callback,data)
+    		}
+    		_ => {
+    			let in_ports = self.midi_in.ports();
+    			let in_port = &in_ports[self.midi_in_index];
+    			println!("#Receiving MIDI from {:?} ",self.midi_in.port_name(&in_port).unwrap());
+                self.midi_in.connect(&in_port, "midir-read-input", callback,data)
+            }
+    	};
 
-    	println!("#Receiving MIDI from {:?} ",self.midi_in.port_name(&in_port).unwrap());
+    	
     	// Get an input port (read from console if multiple are available)
     	   // _conn_in needs to be a named parameter, because it needs to be kept alive until the end of the scope
-        let _conn_in = self.midi_in.connect(&in_port, "midir-read-input", callback,data);
+        //let _conn_in = self.midi_in.connect(&in_port, "midir-read-input", callback,data);
     	
         
     	let mut input = String::new();
         input.clear();
         stdin().read_line(&mut input).unwrap(); // wait for next enter key press
         println!("Closing MIDI port");
-        
-        
     }
 
 
@@ -48,6 +59,7 @@ impl MidiIn {
 	    for (i, p) in in_ports.iter().enumerate() {
 	        println!("{}: {}", i, midi_in.port_name(p).unwrap());
 	    }
+	    println!("6666: Virtual mot input port");
 	    println!("");
 	    
 	}
@@ -56,16 +68,13 @@ impl MidiIn {
 		let mut midi_in = MidiInput::new("midir reading input").unwrap();
 	    midi_in.ignore(Ignore::None);
 	    
-	    if midi_in_index >= midi_in.ports().len() {
+	    if midi_in_index >= midi_in.ports().len() && midi_in_index != 6666 {
 	    	println!("{} is an invalid MIDI input port index.", midi_in_index);
 	    	println!("Choose one of the following:");
 	    	MidiIn::list_midi_input_ports();
 	    }
-	    midi_in_index < midi_in.ports().len()
+	    midi_in_index < midi_in.ports().len() || midi_in_index == 6666
 	}
-
-
-
 }
 
 pub struct MidiOut {
@@ -80,7 +89,7 @@ impl MidiOut {
     	let out_port = &out_ports[midi_out_index];
 
         MidiOut{
-            conn_out:  midi_out.connect(out_port, "aika-out").unwrap()
+            conn_out:  midi_out.connect(out_port, "mot-out").unwrap()
         }
     }
 
