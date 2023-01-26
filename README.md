@@ -3,15 +3,36 @@ mot - MIDI and OSC Tools
 ------------------------
 
 mot consists of several MIDI and OSC command line tools. These are mainly of interest to debug and check OSC messages and MIDI devices. There are applications to:
-* midi_echo: prints MIDI messages coming from a connected MIDI device.
-* osc_echo: prints OSC messages arriving at a certain UDP port.
-* midi_to_osc: a MIDI to OSC bridge which sends MIDI messages coming from a connected MIDI device to an OSC target.
-* midi_roundtrip_latency: measure MIDI round-trip latency.
+* `midi_echo`: prints MIDI messages coming from a connected MIDI device.
+* `osc_echo`: prints OSC messages arriving at a certain UDP port.
+* `midi_to_osc`: a MIDI to OSC bridge which sends MIDI messages coming from a connected MIDI device to an OSC target.
+* `midi_roundtrip_latency`: measure MIDI round-trip latency.
 
 ## Install MIDI and OSC Tools mot
 
+Currently, the only way to install this software is by using `cargo`, the Rust package manager. Please make sure you have [installed a recent cargo/rust version](https://www.rust-lang.org/tools/install) first.
+
+~~~~~~
+git clone --depth 1 https://github.com/JorenSix/mot.git
+cd mot
+cargo build --release
+cargo install --path .
+mot -h 
+~~~~~~
+
+These commands assume that `~/.cargo/bin` is present in the users `$PATH`. Alternatively you can copy mot to a directory more likely to be in the path:
+
+~~~~~~
+git clone --depth 1 https://github.com/JorenSix/mot.git
+cd mot
+cargo build --release
+sudo cp target/release/mot /usr/local/bin
+~~~~~~
+
 
 ## Command line applications in mot
+
+`mot` works with sub-applications which are called with e.g. `mot midi_echo` to call the `midi_echo`sub application. Each sub-application also comes with a help function: `mot midi_echo -h`
 
 ~~~~~~
 mot - Midi and OSC Tools
@@ -32,7 +53,7 @@ Options:
 
 ### MIDI echo
 
-
+This application prints MIDI messages which are received on a MIDI input port. There is also an option to list all input midi ports. This application is ideal to check if a) a MIDI device is correctly recognized, b) a MIDI device sends messages and c) a MIDI device sends the expected messages.
 
 ~~~~~~
 mot midi_echo -l
@@ -44,8 +65,30 @@ mot midi_echo 0
 
 ### OSC echo
 
+This application prints OSC messages which are received on a certain UDP port. This application is ideal to check if a) a OSC messages are being received and b) the OSC messages received are in the expected place or type.
+
+~~~~~~
+mot osc_echo 127.0.0.1:6666
+~~~~~~
+
 ### MIDI to OSC bridge
 
-### MIDI 
+This application sends incoming MIDI messages over OSC to an OSC receiver. This is ideal if you want to send MIDI messages over the network.
+
+~~~~~~
+mot midi_to_osc 127.0.0.1:6666 /midi_transport 0
+~~~~~~
+
+### MIDI round-trip latency
+
+This application sends out a MIDI message as quickly as possible when a MIDI message is received. It can be used to measure MIDI round-trip latency if it is used together with the Teensy patch in the `misc` directory. 
+
+![MIDI round trip latency](misc/round_trip.webp "Round_trip latency measurement")
+
+
+
+## Credits
+
+Joren Six @ IPEM, UGent
 
 
