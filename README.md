@@ -87,7 +87,15 @@ mot midi_to_osc 127.0.0.1:5566 /midi_transport 6666
 
 This application sends out a MIDI message as quickly as possible when a MIDI message is received. It can be used to measure MIDI round-trip latency if it is used together with the Teensy patch in the `misc` directory.  If all goes wel a relatively constanc round-trip latency of less than 1m should be no problem. An example on macOS can be seen below: 
 
+
 ![MIDI round trip latency](misc/round_trip.webp "Round_trip latency measurement")
+
+
+## Browser to OSC example
+
+One of the ways to send OSC messages from a browser to a local network is by using the MIDI out capability of browsers and - using `mot` - translating MIDI to OSC an example can be seen below.
+
+![mot browser to OSC](/misc/browser_to_osc.webp "Browser to OSC")
 
 
 ## Credits
