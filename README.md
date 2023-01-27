@@ -77,10 +77,20 @@ mot osc_echo 127.0.0.1:6666
 
 This application sends incoming MIDI messages over OSC to an OSC receiver. This is ideal if you want to send MIDI messages over the network. 
 
-It also allows to create a virtual MIDI port. This can be usefull e.g. to send messages from a browser window, over MIDI, to a network. If mot is running, a browser can send messages to a virtual port which is then translated to UDP messages on a network.
+It also allows to create a virtual MIDI port. This can be useful e.g. to send messages from a browser window, over MIDI, to a network. If mot is running, a browser can send messages to a virtual port which is then translated to UDP messages on a network.
 
 ~~~~~~
 mot midi_to_osc 127.0.0.1:5566 /midi_transport 6666
+~~~~~~
+
+### OSC to MIDI bridge
+
+This application receives OSC messages and sends them to a MIDI device. This is ideal if you want to receive messages coming from the @midi_to_osc@ command. The decoding is simple: it expects OSC messages with each byte of a midi message encoded in an integer. Each integer is packed in a byte and send to MIDI transparently. There is a check if the integer is positive and under 256.
+
+It also allows to create a virtual MIDI port. The following example receives OSC on UDP port 5566 and sends it to a virtual midi port. 
+
+~~~~~~
+mot osc_to_midi 127.0.0.1:5566 /m 6666
 ~~~~~~
 
 ### MIDI round-trip latency

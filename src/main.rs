@@ -6,8 +6,14 @@ use std::str::FromStr;
 use std::net::{SocketAddrV4};
 
 use rosc::OscType;
+use rosc::OscPacket;
+
+use once_cell::sync::OnceCell;
 
 use std::sync::mpsc::channel;
+use std::sync::Mutex;
+
+use std::ops::DerefMut;
 
 
 struct MidiRoundTrip {
@@ -53,22 +59,131 @@ impl MidiEcho{
     }
 }
 
+struct OscToMidi {
+    midi_out: midi_io::MidiOut,
+    verbose: bool,
+    osc_host_address: String,
+    osc_path_address: String
+}
+
+unsafe impl Sync for OscToMidi {}
+
+impl core::fmt::Debug for OscToMidi{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("OSC to MIDI")
+         .field("verbose", &self.verbose)
+         .field("osc_host_address", &self.osc_host_address)
+         .finish()
+    }
+}
+
+static INSTANCE: OnceCell<Mutex<OscToMidi>> = OnceCell::new();
+
+impl OscToMidi{
+
+    fn new(osc_host_address: &str,midi_out_port_index: usize, verbose: bool, osc_path_address: &str) -> OscToMidi {
+        OscToMidi{
+            osc_host_address: osc_host_address.to_string(),
+            verbose: verbose,
+            midi_out: midi_io::MidiOut::new(midi_out_port_index),
+            osc_path_address: osc_path_address.to_string()
+        }
+    }
+
+    fn osc_to_midi(osc_host_address: &str){
+        let (send, _recv) = channel::<u32>();
+        let callback = || OscToMidi::forward_osc_packet_to_midi;
+        osc_io::OscServer::new(osc_host_address,callback()).listen(&send);
+    }
+
+    fn send_midi_message(message: &[u8]) {
+        INSTANCE.get().expect("OSC to MIDI not initialized").lock().unwrap().deref_mut().midi_out.send_full(message);
+    }
+
+    fn osc_path_address() -> String {
+        return INSTANCE.get().expect("OSC to MIDI not initialized").lock().unwrap().deref_mut().osc_path_address.to_string();
+    }
+
+    fn verbose() -> bool {
+        return INSTANCE.get().expect("OSC to MIDI not initialized").lock().unwrap().deref_mut().verbose;
+    }
+
+    fn forward_osc_packet_to_midi(packet: OscPacket) -> u32 {
+        match packet {
+            OscPacket::Message(msg) => {
+               let path_address = OscToMidi::osc_path_address();
+                
+                if msg.addr.as_str() == path_address {
+                   let mut midi_data = vec![];
+                    if OscToMidi::verbose() {
+                        println!("OSC msg received: {:?}", msg);
+                    }
+
+                    for osc_arg in msg.args {
+                        match osc_arg.int() {
+                            Some(v) => {
+                                let number :i32 = v;
+                                if number >=0 && number < 256 {
+                                    midi_data.push( number as u8)
+                                }else{
+                                    if OscToMidi::verbose() {
+                                        println!("Ignored number not fitting in byte: {:?}", number);
+                                    }
+                                }
+                            },
+                            _ => {
+                                if OscToMidi::verbose() {
+                                    println!("Ignored unsupported OSC type");
+                                }
+                            }
+                        }              
+                    }
+
+                    if midi_data.len() > 0 {
+                        //Max 1000 bytes!
+                        let mut message: [u8;1000] = [0 as u8; 1000];
+                        let mut index = 0;
+                        for x in &midi_data {
+                            message[index] = *x;
+                            index = index+1;
+                        }
+                        OscToMidi::send_midi_message(&message[0 .. midi_data.len()]);
+                    }
+                } else {
+                    if OscToMidi::verbose() {
+                        println!("Ignored message on OSC address: {:?}", msg.addr.as_str());
+                    }
+                    
+                    
+                }
+            }
+
+            OscPacket::Bundle(bundle) => {
+                println!("OSC Bundle: {:?}", bundle);
+            }
+        }
+
+        0
+    }
+}
+
+
 
 struct MidiToOsc {
     osc_sender: osc_io::OscSender,
     midi_in: midi_io::MidiIn,
     verbose: bool,
-    address: String
+    osc_path_address: String
 }
 
 impl MidiToOsc{
 
-    fn new(osc_target_address: &str,midi_in_port_index: usize, verbose: bool, address: &str) -> MidiToOsc {
+    fn new(osc_host_address: &str,midi_in_port_index: usize, verbose: bool, osc_path_address: &str) -> MidiToOsc {
         MidiToOsc{
-            osc_sender: osc_io::OscSender::new(osc_target_address.to_string()),
+            osc_sender: osc_io::OscSender::new(osc_host_address.to_string()),
             verbose: verbose,
             midi_in: midi_io::MidiIn::new(midi_in_port_index),
-            address: address.to_string()
+            osc_path_address: osc_path_address.to_string()
         }
     }
 
@@ -79,9 +194,10 @@ impl MidiToOsc{
             message_index = message_index + 1;        
             if self.verbose {println!("{} {:?}",time_stamp, message);}
             let osc_args = message.iter().map(|&x| OscType::Int(x.into())).collect::<Vec<_>>();
-            self.osc_sender.send(self.address.to_string(), osc_args);            
+            self.osc_sender.send(self.osc_path_address.to_string(), osc_args);            
         },());
     }
+
 }
 
 
@@ -101,7 +217,7 @@ fn main() {
         .about("mot - Midi and OSC Tools")
         .subcommand_required(true)
         .subcommand(Command::new("midi_to_osc")
-            .about("Transport MIDI over OSC")
+            .about("Send MIDI over OSC")
             .arg(Arg::new("verbose")
                 .short('v')
                 .num_args(0)
@@ -125,6 +241,31 @@ fn main() {
                 .num_args(0)
                 .required(false)
                 .help("list midi input devices")))
+        .subcommand(Command::new("osc_to_midi")
+            .about("Translate OSC to MIDI")
+            .arg(Arg::new("verbose")
+                .short('v')
+                .num_args(0)
+                .required(false)
+                .help("print debug information verbosely"))
+            .arg(Arg::new("host:port")
+                .default_value("127.0.0.1:1234")
+                .help("The host:port to receive OSC data from")
+                .value_name("host:port")
+                .value_parser(is_host_with_port))
+            .arg(Arg::new("osc_address")
+                .default_value("/midi")
+                .help("The OSC address to receive data from.")
+                .value_name("OSC_address"))
+            .arg(Arg::new("midi_output_index")
+                .default_value("0") 
+                .value_parser(clap::value_parser!(usize))
+                .help("MIDI output device index. List the devices to get the correct index."))
+            .arg(Arg::new("list")
+                .short('l')
+                .num_args(0)
+                .required(false)
+                .help("list MIDI output devices")))
         .subcommand(Command::new("midi_echo")
             .about("Print incoming MIDI messages.")
             .arg(Arg::new("list")
@@ -165,6 +306,7 @@ fn main() {
         ).get_matches();
 
 
+
     if let Some(sub_matches) = matches.subcommand_matches("midi_echo") {
         if sub_matches.value_source("list") == Some(clap::parser::ValueSource::CommandLine) {
             println!{"Listing MIDI input devices:"}
@@ -193,6 +335,23 @@ fn main() {
         }
     }
 
+    if let Some(sub_matches) = matches.subcommand_matches("osc_to_midi") {
+        if sub_matches.value_source("list") == Some(clap::parser::ValueSource::CommandLine) {
+            midi_io::MidiOut::list_midi_output_ports();
+        }else{
+            let midi_output_index: usize = *sub_matches.get_one("midi_output_index").expect("`midi_output_index` is required");
+            let verbose = sub_matches.value_source("verbose") == Some(clap::parser::ValueSource::CommandLine);
+            let osc_host_address = sub_matches.get_one::<String>("host:port").unwrap();
+            let osc_method_address = sub_matches.get_one::<String>("osc_address").unwrap();
+           
+            if midi_io::MidiOut::check_midi_output_port_index(midi_output_index) {
+               let osc_to_midi = OscToMidi::new(osc_host_address,midi_output_index,verbose,osc_method_address);
+               INSTANCE.set(Mutex::new(osc_to_midi)).unwrap();
+               OscToMidi::osc_to_midi(osc_host_address);
+            }
+        }
+    }
+
     if let Some(sub_matches) = matches.subcommand_matches("osc_echo") {
         let addr = sub_matches.get_one::<String>("host:port").unwrap();
         let (send, _recv) = channel::<u32>();
@@ -209,7 +368,7 @@ fn main() {
             println!{"MIDI roundtrip latency application."}
             if midi_io::MidiIn::check_midi_input_port_index(midi_input_index) && midi_io::MidiOut::check_midi_output_port_index(midi_output_index)   {
                  MidiRoundTrip::new(midi_input_index,midi_output_index).respond_to_midi();
-            }  
+            }
         }
     }
 }
