@@ -1,5 +1,6 @@
 use midir::{MidiOutput,MidiInput, Ignore,MidiOutputConnection};
 
+#[cfg(target_family = "unix")]
 use midir::os::unix::{VirtualInput,VirtualOutput};
 
 use std::io::stdin;
@@ -22,9 +23,11 @@ impl MidiIn {
         }
     }
 
+    #[cfg(target_family = "unix")]
     pub fn listen<F,T: 'static +  Send>(self, callback: F,data: T,)  where F: FnMut(u64, &[u8], &mut T) + Send + 'static {
     	
     	let _con = match self.midi_in_index {
+
     		6666 => {
     			println!("#Receiving MIDI from virtual mot port");
     			self.midi_in.create_virtual("mot virtual port", callback,data)
@@ -43,6 +46,19 @@ impl MidiIn {
         println!("Closing MIDI port");
     }
 
+    #[cfg(not(target_family = "unix"))]
+    pub fn listen<F,T: 'static +  Send>(self, callback: F,data: T,)  where F: FnMut(u64, &[u8], &mut T) + Send + 'static {
+		let in_ports = self.midi_in.ports();
+		let in_port = &in_ports[self.midi_in_index];
+		println!("#Receiving MIDI from {:?} ",self.midi_in.port_name(&in_port).unwrap());
+		let _con = self.midi_in.connect(&in_port, "midir-read-input", callback,data);
+
+		let mut input = String::new();
+		input.clear();
+		stdin().read_line(&mut input).unwrap(); // wait for next enter key press
+		println!("Closing MIDI port");
+    }
+
 
 	pub fn list_midi_input_ports(){
 	    let mut midi_in = MidiInput::new("midir reading input").unwrap();
@@ -53,7 +69,10 @@ impl MidiIn {
 	    for (i, p) in in_ports.iter().enumerate() {
 	        println!("{}: {}", i, midi_in.port_name(p).unwrap());
 	    }
-	    println!("6666: Virtual mot input port");
+	    if cfg!(target_family = "unix"){
+			println!("6666: Virtual mot input port");
+		}
+	    
 	    println!("");
 	    
 	}
@@ -77,6 +96,7 @@ pub struct MidiOut {
 
 impl MidiOut {
 
+	#[cfg(target_family = "unix")]
 	pub fn new(midi_out_index: usize) -> MidiOut {
 
 		let midi_out = MidiOutput::new("midir reading output").unwrap();
@@ -91,6 +111,18 @@ impl MidiOut {
                 midi_out.connect(out_port, "mot-out").expect("Could not connect to port")
             }
     	};
+
+        MidiOut{
+            conn_out:  out_connection
+        }
+    }
+
+    #[cfg(not(target_family = "unix"))]
+	pub fn new(midi_out_index: usize) -> MidiOut {
+		let midi_out = MidiOutput::new("midir reading output").unwrap();
+    	let out_ports = midi_out.ports();
+        let out_port = &out_ports[midi_out_index];
+        let out_connection = midi_out.connect(out_port, "mot-out").expect("Could not connect to port");
 
         MidiOut{
             conn_out:  out_connection
@@ -114,7 +146,9 @@ impl MidiOut {
 	    for (i, p) in out_ports.iter().enumerate() {
 	        println!("{}: {}", i, midi_out.port_name(p).unwrap());
 	    }
-	    println!("6666: Virtual mot ouput port");
+	    if cfg!(target_family = "unix") {
+			println!("6666: Virtual mot ouput port");
+		}
 	    println!("");
 	}
 
