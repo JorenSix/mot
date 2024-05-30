@@ -2,6 +2,8 @@ mod midi_io;
 mod osc_io;
 
 use clap::{Arg, Command};
+use osc_io::OscSender;
+use std::io::{self, BufRead};
 use std::str::FromStr;
 use std::net::{SocketAddrV4};
 
@@ -153,8 +155,6 @@ impl OscToMidi{
                     if OscToMidi::verbose() {
                         println!("Ignored message on OSC address: {:?}", msg.addr.as_str());
                     }
-                    
-                    
                 }
             }
 
@@ -162,8 +162,7 @@ impl OscToMidi{
                 println!("OSC Bundle: {:?}", bundle);
             }
         }
-
-        0
+        return 0;
     }
 }
 
@@ -208,6 +207,66 @@ fn is_host_with_port(v: &str) -> Result<String,String>{
         Err(_e) => Err(String::from("Expects a valid IPv4 address with UDP port: xxx.xxx.xxx.xxx:port")),
     }
 }
+
+fn osc_send(osc_target_host_address: &str, verbose: bool) {
+    
+    let stdin = io::stdin();
+
+    let osc_sender = OscSender::new(osc_target_host_address.to_string());
+    for line in stdin.lock().lines() {
+        let line = line.unwrap(); // Handle potential error
+        let mut tokens: Vec<&str> = line.split_whitespace().collect();
+       
+
+        // do not send empty messages
+        if tokens.len() == 0 {
+            if verbose {
+                print!("Empty message; nothing send\n");
+            }
+            continue;
+        }
+
+        // else
+
+        // check if the first token is a valid osc method (starts with '/')
+        let osc_method = match tokens.get(0) {
+            Some(v) => { 
+                if v.starts_with('/') {
+                    v.to_string()
+                } else {
+                    format!("/{}", v)
+                }
+            },
+            None => {
+                println!("No OSC method provided");
+                continue;
+            }
+        };
+
+        // remove the first token
+        tokens.remove(0);
+
+        let mut osc_args: Vec<OscType> = Vec::new();
+
+        for token in tokens {
+            if let Ok(int) = token.parse::<i32>() {
+                osc_args.push(OscType::Int(int));
+            } else if let Ok(float) = token.parse::<f32>() {
+                osc_args.push(OscType::Float(float));
+            } else {
+                osc_args.push(OscType::String(token.to_string()));
+            }
+        }
+        
+        osc_sender.send(osc_method.to_string(), osc_args.clone());
+
+        if verbose {
+            print!("Sent OSC message to {} with args {:?}\n", osc_target_host_address, osc_args);
+        }
+    }
+}
+
+
 
 fn main() {
     let matches = Command::new("mot")
@@ -288,6 +347,16 @@ fn main() {
                 .help("the host:port to receive OSC data")
                 .value_parser(is_host_with_port))
             )
+        .subcommand(Command::new("osc_send")
+            .about("Send OSC messages from STDIN. The first token of each line is the OSC method, the rest are the arguments. Only floats, ints and strings are converted to OSC types.")
+            .arg(Arg::new("verbose")
+                .short('v')
+                .help("print verbose information"))
+            .arg(Arg::new("host:port")
+                .default_value("127.0.0.1:1234")
+                .help("the host:port to send OSC data to")
+                .value_parser(is_host_with_port))
+            )
         .subcommand(Command::new("midi_roundtrip_latency")
             .about("Test MIDI roundtrip latency")
             .arg(Arg::new("list")
@@ -316,8 +385,14 @@ fn main() {
             //let midi_input_index = usize::from_str(sub_matches.value_of("midi_input_index").unwrap()).unwrap();
             if midi_io::MidiIn::check_midi_input_port_index(midi_input_index) {
                  MidiEcho::new(midi_input_index).echo_midi();
-            }  
+            }
         }
+    }
+
+    if let Some(sub_matches) = matches.subcommand_matches("osc_send") {
+        let osc_target_host_address = sub_matches.get_one::<String>("host:port").unwrap();
+        let verbose = sub_matches.value_source("verbose") == Some(clap::parser::ValueSource::CommandLine);
+        osc_send(osc_target_host_address, verbose);
     }
 
     if let Some(sub_matches) = matches.subcommand_matches("midi_to_osc") {
