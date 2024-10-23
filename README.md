@@ -117,6 +117,10 @@ This application sends out a MIDI message as quickly as possible when a MIDI mes
 ![MIDI round trip latency](misc/round_trip.webp "Round_trip latency measurement")
 
 
+The roundtrip time for a midi message send over BTLE is much worse: with an ESP32 I measured  an average of 43 +-	6 milliseconds with the worst rountrip time around 60 ms. There is also a BT LE MIDI 
+
+
+
 ## Browser to OSC example
 
 One of the ways to send OSC messages from a browser to a local network is by using the MIDI out capability of browsers and - using `mot` - translating MIDI to OSC an example can be seen below.
