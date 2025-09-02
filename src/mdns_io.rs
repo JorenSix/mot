@@ -1,0 +1,212 @@
+use mdns_sd::{ServiceDaemon, ServiceInfo, DaemonEvent};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::Duration;
+
+/// A simple wrapper for mDNS service registration
+pub struct MdnsService {
+    daemon: Arc<ServiceDaemon>,
+    service_fullname: Option<String>,
+}
+
+impl MdnsService {
+    /// Create a new mDNS service instance
+    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let daemon = ServiceDaemon::new()?;
+        Ok(Self {
+            daemon: Arc::new(daemon),
+            service_fullname: None,
+        })
+    }
+
+    /// Register an mDNS service
+    /// 
+    /// # Arguments
+    /// * `name` - The instance name of the service (e.g., "my-device")
+    /// * `protocol` - The service protocol (e.g., "_http._tcp" or "_ssh._tcp")
+    /// * `port` - The port number the service is running on
+    /// 
+    /// # Example
+    /// ```
+    /// let mut mdns = MdnsService::new()?;
+    /// mdns.register("my-device", "_http._tcp", 8080)?;
+    /// ```
+    pub fn register(
+        &mut self,
+        name: &str,
+        protocol: &str,
+        port: u16,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Format the service type with .local. suffix
+        let service_type = if protocol.ends_with(".local.") {
+            protocol.to_string()
+        } else {
+            format!("{}.local.", protocol)
+        };
+
+        // Use the machine's hostname or a default
+        let hostname = hostname::get()
+            .unwrap_or_else(|_| "localhost".into())
+            .to_string_lossy()
+            .to_string();
+        let service_hostname = format!("{}.local.", hostname);
+
+        // Create service info with auto-discovered addresses
+        let properties: [(&str, &str); 0] = [];
+        let service_info = ServiceInfo::new(
+            &service_type,
+            name,
+            &service_hostname,
+            "", // Empty string for auto-discovery
+            port,
+            &properties[..],
+        )?
+        .enable_addr_auto();
+
+        // Store the fullname for potential unregistration
+        self.service_fullname = Some(service_info.get_fullname().to_string());
+
+        // Register the service
+        self.daemon.register(service_info)?;
+
+        Ok(())
+    }
+
+    /// Unregister the currently registered service
+    pub fn unregister(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(fullname) = &self.service_fullname {
+            let receiver = self.daemon.unregister(fullname)?;
+            
+            // Wait for unregistration to complete
+            while let Ok(_event) = receiver.recv() {
+                // Process events until channel closes
+            }
+            
+            self.service_fullname = None;
+        }
+        Ok(())
+    }
+
+    /// Keep the service running and monitor for events
+    /// This will block until an error occurs
+    pub fn run_forever(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let monitor = self.daemon.monitor()?;
+        
+        while let Ok(event) = monitor.recv() {
+            if let DaemonEvent::Error(e) = event {
+                return Err(Box::new(e));
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Keep the service running while monitoring the running flag
+    /// Will automatically unregister when running becomes false
+    pub fn run_with_interrupt(
+        &mut self, 
+        running: Arc<AtomicBool>
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let monitor = self.daemon.monitor()?;
+        
+        // Set a receive timeout so we can periodically check the running flag
+        let timeout = Duration::from_millis(100);
+        
+        while running.load(Ordering::SeqCst) {
+            match monitor.recv_timeout(timeout) {
+                Ok(event) => {
+                    if let DaemonEvent::Error(e) = event {
+                        // Unregister before returning error
+                        let _ = self.unregister();
+                        return Err(Box::new(e));
+                    }
+                }
+                Err(flume::RecvTimeoutError::Timeout) => {
+                    // Timeout occurred, check running flag and continue
+                    continue;
+                }
+                Err(flume::RecvTimeoutError::Disconnected) => {
+                    // Channel disconnected, exit gracefully
+                    break;
+                }
+            }
+        }
+        
+        // Unregister the service when stopping
+        self.unregister()?;
+        println!("mDNS service unregistered gracefully");
+        
+        Ok(())
+    }
+
+    /// Run the service for a specified duration
+    #[cfg(test)]
+    pub fn run_for(&self, duration: Duration) -> Result<(), Box<dyn std::error::Error>> {
+        thread::sleep(duration);
+        Ok(())
+    }
+
+    /// Run the service for a specified duration while monitoring the running flag
+    #[cfg(test)]
+    pub fn run_for_with_interrupt(
+        &mut self,
+        duration: Duration,
+        running: Arc<AtomicBool>
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let start_time = std::time::Instant::now();
+        
+        while running.load(Ordering::SeqCst) && start_time.elapsed() < duration {
+            thread::sleep(Duration::from_millis(10));
+        }
+        
+        // Unregister when done
+        self.unregister()?;
+        
+        Ok(())
+    }
+}
+
+impl Drop for MdnsService {
+    fn drop(&mut self) {
+        // Attempt to unregister on drop
+        let _ = self.unregister();
+    }
+}
+
+// Example usage
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn test_basic_registration() {
+        let mut mdns = MdnsService::new().unwrap();
+        
+        // Register a simple HTTP service
+        mdns.register("my-web-server", "_http._tcp", 8080).unwrap();
+        
+        // Keep it running for 2 seconds
+        mdns.run_for(Duration::from_secs(2)).unwrap();
+    }
+
+    #[test]
+    fn test_interrupt_registration() {
+        let mut mdns = MdnsService::new().unwrap();
+        let running = Arc::new(AtomicBool::new(true));
+        
+        // Register a simple HTTP service
+        mdns.register("my-web-server", "_http._tcp", 8080).unwrap();
+        
+        // Simulate interrupt after 1 second
+        let running_clone = running.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(1));
+            running_clone.store(false, Ordering::SeqCst);
+        });
+        
+        // This should stop when running becomes false
+        mdns.run_for_with_interrupt(Duration::from_secs(5), running).unwrap();
+    }
+}
