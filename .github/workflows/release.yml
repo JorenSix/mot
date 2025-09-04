@@ -33,7 +33,9 @@ jobs:
             gcc-aarch64-linux-gnu \
             libc6-dev-arm64-cross \
             gcc-mingw-w64-x86-64 \
-            musl-tools
+            musl-tools \
+            libasound2-dev \
+            pkg-config
 
       - name: Configure cross-compilation
         run: |
