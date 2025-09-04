@@ -1,7 +1,6 @@
 use mdns_sd::{ServiceDaemon, ServiceInfo, DaemonEvent};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 use std::time::Duration;
 
 /// A simple wrapper for mDNS service registration
@@ -88,20 +87,6 @@ impl MdnsService {
         Ok(())
     }
 
-    /// Keep the service running and monitor for events
-    /// This will block until an error occurs
-    pub fn run_forever(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let monitor = self.daemon.monitor()?;
-        
-        while let Ok(event) = monitor.recv() {
-            if let DaemonEvent::Error(e) = event {
-                return Err(Box::new(e));
-            }
-        }
-        
-        Ok(())
-    }
-
     /// Keep the service running while monitoring the running flag
     /// Will automatically unregister when running becomes false
     pub fn run_with_interrupt(
@@ -135,15 +120,10 @@ impl MdnsService {
         
         // Unregister the service when stopping
         self.unregister()?;
+
+        #[cfg(debug_assertions)]
         println!("mDNS service unregistered gracefully");
         
-        Ok(())
-    }
-
-    /// Run the service for a specified duration
-    #[cfg(test)]
-    pub fn run_for(&self, duration: Duration) -> Result<(), Box<dyn std::error::Error>> {
-        thread::sleep(duration);
         Ok(())
     }
 
@@ -179,17 +159,7 @@ impl Drop for MdnsService {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicBool, Ordering};
-
-    #[test]
-    fn test_basic_registration() {
-        let mut mdns = MdnsService::new().unwrap();
-        
-        // Register a simple HTTP service
-        mdns.register("my-web-server", "_http._tcp", 8080).unwrap();
-        
-        // Keep it running for 2 seconds
-        mdns.run_for(Duration::from_secs(2)).unwrap();
-    }
+    use std::thread;
 
     #[test]
     fn test_interrupt_registration() {

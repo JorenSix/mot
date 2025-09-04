@@ -1,4 +1,4 @@
-mod mdns_io;
+mod mdns_service_manager;
 mod midi_io;
 mod osc_io;
 
@@ -502,8 +502,8 @@ fn main() {
                 );
                 INSTANCE.set(Mutex::new(osc_to_midi)).unwrap();
 
-                 // Register mDNS service for OSC-to-MIDI
-                let mut mdns = mdns_io::MdnsService::new().unwrap();
+                // Register mDNS service to indicate that this is an OSC receiver
+                let mut mdns = mdns_service_manager::MdnsService::new().unwrap();
 
                 // Register a simple OSC service
                 let port = osc_host_address
@@ -520,17 +520,34 @@ fn main() {
                     mdns.run_with_interrupt(mdns_running).unwrap();
                 });
 
-                OscToMidi::osc_to_midi(osc_host_address,running);
-
-                print!("finished listening on {}", osc_host_address);
+                OscToMidi::osc_to_midi(osc_host_address,running.clone());
             }
         }
     }
 
     if let Some(sub_matches) = matches.subcommand_matches("osc_echo") {
         let addr = sub_matches.get_one::<String>("host:port").unwrap();
+        
+        // Register mDNS service to indicate that this is an OSC receiver
+        let mut mdns = mdns_service_manager::MdnsService::new().unwrap();
+
+        // Register a simple OSC service
+        let port = addr
+            .split(':')
+            .last()
+            .unwrap_or("8080")
+            .parse::<u16>()
+            .unwrap_or(8080);
+        mdns.register("mot-osc-echo", "_osc._udp", port)
+            .unwrap();
+
+        let mdns_running = running.clone();
+        thread::spawn(move || {
+            mdns.run_with_interrupt(mdns_running).unwrap();
+        });
+
         let (send, _recv) = channel::<u32>();
-        osc_io::OscServer::new(addr, osc_io::OscServer::echo_osc_packet).listen(&send);
+        osc_io::OscServer::new(addr, osc_io::OscServer::echo_osc_packet).listen_with_interrupt(&send, running);
     }
 
     if let Some(sub_matches) = matches.subcommand_matches("midi_roundtrip_latency") {
