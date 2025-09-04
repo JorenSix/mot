@@ -24,6 +24,7 @@ jobs:
             aarch64-unknown-linux-gnu
             x86_64-pc-windows-gnu
             x86_64-apple-darwin
+            aarch64-apple-darwin
 
       - name: Install cross-compilation dependencies
         run: |
@@ -61,6 +62,10 @@ jobs:
           [target.x86_64-apple-darwin]
           linker = "x86_64-apple-darwin21.4-clang"
           ar = "x86_64-apple-darwin21.4-ar"
+          
+          [target.aarch64-apple-darwin]
+          linker = "aarch64-apple-darwin21.4-clang"
+          ar = "aarch64-apple-darwin21.4-ar"
           EOF
 
       - name: Build for all targets
@@ -79,25 +84,31 @@ jobs:
           
           # macOS x86_64
           cargo build --release --target x86_64-apple-darwin
+          
+          # macOS ARM64 (Apple Silicon)
+          cargo build --release --target aarch64-apple-darwin
 
       - name: Create archives
         run: |
           mkdir -p releases
           
-          # Linux x86_64
-          tar -czf releases/mot-linux-x86_64.tar.gz -C target/x86_64-unknown-linux-gnu/release mot
+          # Linux x86_64 - zip format
+          zip -j releases/mot_linux.zip target/x86_64-unknown-linux-gnu/release/mot
           
-          # Linux x86_64 musl
-          tar -czf releases/mot-linux-x86_64-musl.tar.gz -C target/x86_64-unknown-linux-musl/release mot
+          # Linux x86_64 musl - zip format
+          zip -j releases/mot_linux_musl.zip target/x86_64-unknown-linux-musl/release/mot
           
-          # Linux ARM64
-          tar -czf releases/mot-linux-aarch64.tar.gz -C target/aarch64-unknown-linux-gnu/release mot
+          # Linux ARM64 - zip format
+          zip -j releases/mot_linux_arm64.zip target/aarch64-unknown-linux-gnu/release/mot
           
-          # Windows x86_64
-          zip -j releases/mot-windows-x86_64.zip target/x86_64-pc-windows-gnu/release/mot.exe
+          # Windows x86_64 - zip format
+          zip -j releases/mot_windows.zip target/x86_64-pc-windows-gnu/release/mot.exe
           
-          # macOS x86_64
-          tar -czf releases/mot-macos-x86_64.tar.gz -C target/x86_64-apple-darwin/release mot
+          # macOS x86_64 - zip format
+          zip -j releases/mot_macos.zip target/x86_64-apple-darwin/release/mot
+          
+          # macOS ARM64 (Apple Silicon) - zip format
+          zip -j releases/mot_macos_arm64.zip target/aarch64-apple-darwin/release/mot
 
       - name: Get tag name
         id: get_tag
