@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: |
+            x86_64-unknown-linux-gnu
+            x86_64-unknown-linux-musl
+            aarch64-unknown-linux-gnu
+            x86_64-pc-windows-gnu
+            x86_64-apple-darwin
+
+      - name: Install cross-compilation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            libc6-dev-arm64-cross \
+            gcc-mingw-w64-x86-64 \
+            musl-tools
+
+      - name: Configure cross-compilation
+        run: |
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml << EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          
+          [target.x86_64-pc-windows-gnu]
+          linker = "x86_64-w64-mingw32-gcc"
+          EOF
+
+      - name: Install osxcross for macOS
+        run: |
+          git clone https://github.com/tpoechtrager/osxcross.git
+          cd osxcross
+          wget -nc https://github.com/joseluisq/macosx-sdks/releases/download/12.3/MacOSX12.3.sdk.tar.xz
+          mv MacOSX12.3.sdk.tar.xz tarballs/
+          UNATTENDED=yes OSX_VERSION_MIN=10.7 ./build.sh
+          echo "$(pwd)/target/bin" >> $GITHUB_PATH
+
+      - name: Configure macOS cross-compilation
+        run: |
+          cat >> ~/.cargo/config.toml << EOF
+          
+          [target.x86_64-apple-darwin]
+          linker = "x86_64-apple-darwin21.4-clang"
+          ar = "x86_64-apple-darwin21.4-ar"
+          EOF
+
+      - name: Build for all targets
+        run: |
+          # Linux x86_64
+          cargo build --release --target x86_64-unknown-linux-gnu
+          
+          # Linux x86_64 musl
+          cargo build --release --target x86_64-unknown-linux-musl
+          
+          # Linux ARM64
+          cargo build --release --target aarch64-unknown-linux-gnu
+          
+          # Windows x86_64
+          cargo build --release --target x86_64-pc-windows-gnu
+          
+          # macOS x86_64
+          cargo build --release --target x86_64-apple-darwin
+
+      - name: Create archives
+        run: |
+          mkdir -p releases
+          
+          # Linux x86_64
+          tar -czf releases/mot-linux-x86_64.tar.gz -C target/x86_64-unknown-linux-gnu/release mot
+          
+          # Linux x86_64 musl
+          tar -czf releases/mot-linux-x86_64-musl.tar.gz -C target/x86_64-unknown-linux-musl/release mot
+          
+          # Linux ARM64
+          tar -czf releases/mot-linux-aarch64.tar.gz -C target/aarch64-unknown-linux-gnu/release mot
+          
+          # Windows x86_64
+          zip -j releases/mot-windows-x86_64.zip target/x86_64-pc-windows-gnu/release/mot.exe
+          
+          # macOS x86_64
+          tar -czf releases/mot-macos-x86_64.tar.gz -C target/x86_64-apple-darwin/release mot
+
+      - name: Get tag name
+        id: get_tag
+        run: echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_tag.outputs.tag_name }}
+          name: Release ${{ steps.get_tag.outputs.tag_name }}
+          files: releases/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
