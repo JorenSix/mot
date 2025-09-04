@@ -109,6 +109,30 @@ jobs:
           
           # macOS ARM64 (Apple Silicon) - zip format
           zip -j releases/mot_macos_arm64.zip target/aarch64-apple-darwin/release/mot
+          
+          # List created files for debugging
+          ls -la releases/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - no previous tag found"
+            CHANGELOG="## What's New\n\nThis is the first release of mot - MIDI and OSC Tools.\n\n### Features\n- MIDI to OSC conversion\n- OSC to MIDI conversion\n- MIDI echo functionality\n- OSC echo functionality\n- OSC message sending from stdin\n- MIDI roundtrip latency testing\n- mDNS service discovery"
+          else
+            echo "Generating changelog from $PREV_TAG to HEAD"
+            CHANGELOG="## What's Changed\n\n"
+            CHANGELOG+="$(git log --pretty=format:'- %s (%h)' $PREV_TAG..HEAD | head -20)"
+          fi
+          
+          # Save changelog to file and output
+          echo -e "$CHANGELOG" > changelog.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Get tag name
         id: get_tag
@@ -119,6 +143,15 @@ jobs:
         with:
           tag_name: ${{ steps.get_tag.outputs.tag_name }}
           name: Release ${{ steps.get_tag.outputs.tag_name }}
-          files: releases/*
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: |
+            releases/mot_linux.zip
+            releases/mot_linux_musl.zip
+            releases/mot_linux_arm64.zip
+            releases/mot_windows.zip
+            releases/mot_macos.zip
+            releases/mot_macos_arm64.zip
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
