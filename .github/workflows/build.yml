@@ -1,4 +1,4 @@
-name: mot build and test
+name: Test end build mot
 on: [push, pull_request]
 
 jobs:
