@@ -1,18 +1,13 @@
-on: [push]
-
-name: mot build
+name: mot build and test
+on: [push, pull_request]
 
 jobs:
-  build_and_test:
-    name: Rust project
+  test:
+    name: cargo test and build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - run: sudo apt-get install libasound2-dev
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - run: cargo test
+      - run: cargo build --release

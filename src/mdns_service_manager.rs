@@ -154,14 +154,14 @@ mod tests {
         // Register a simple HTTP service
         mdns.register("my-web-server", "_http._tcp", 8080).unwrap();
         
-        // Simulate interrupt after 1 second
+        // Simulate interrupt after 2 seconds
         let running_clone = running.clone();
         thread::spawn(move || {
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_secs(2));
             running_clone.store(false, Ordering::SeqCst);
         });
         
         // This should stop when running becomes false
-        mdns.run_for_interrupt(Duration::from_secs(5), running).unwrap();
+        mdns.run_with_interrupt(running).unwrap();
     }
 }
