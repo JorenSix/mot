@@ -3,9 +3,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-#[cfg(test)]
-use std::thread;
-
 /// A simple wrapper for mDNS service registration
 pub struct MdnsService {
     daemon: Arc<ServiceDaemon>,
