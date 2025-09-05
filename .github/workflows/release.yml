@@ -34,8 +34,16 @@ jobs:
             libc6-dev-arm64-cross \
             gcc-mingw-w64-x86-64 \
             musl-tools \
+            musl-dev \
             libasound2-dev \
+            libasound2-dev:arm64 \
             pkg-config
+
+      - name: Set environment variables for cross-compilation
+        run: |
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_SYSTEM_LIBS=1" >> $GITHUB_ENV
+          echo "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1" >> $GITHUB_ENV
 
       - name: Configure cross-compilation
         run: |
@@ -72,11 +80,13 @@ jobs:
 
       - name: Build for all targets
         run: |
+          # Set PKG_CONFIG environment for cross-compilation
+          export PKG_CONFIG_ALLOW_CROSS=1
+          export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
+          export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
+          
           # Linux x86_64
           cargo build --release --target x86_64-unknown-linux-gnu
-          
-          # Linux x86_64 musl
-          cargo build --release --target x86_64-unknown-linux-musl
           
           # Linux ARM64
           cargo build --release --target aarch64-unknown-linux-gnu
@@ -89,6 +99,9 @@ jobs:
           
           # macOS ARM64 (Apple Silicon)
           cargo build --release --target aarch64-apple-darwin
+          
+          # Linux x86_64 musl (skip ALSA for musl build)
+          ALSA_NO_PKG_CONFIG=1 cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Create archives
         run: |
