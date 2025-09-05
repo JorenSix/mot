@@ -17,8 +17,10 @@ jobs:
             archive: zip
           - target: x86_64-unknown-linux-musl
             archive: zip
+            pre_build: "apt-get update && apt-get install -y libasound2-dev pkg-config"
           - target: x86_64-apple-darwin
             archive: zip
+            macos_target: "10.12"
     steps:
       - uses: actions/checkout@v4
       - name: Compile and release
@@ -26,6 +28,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TOOLCHAIN_VERSION: "1.81"
+          PRE_BUILD: ${{ matrix.pre_build }}
+          MACOSX_DEPLOYMENT_TARGET: ${{ matrix.macos_target }}
         with:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
