@@ -36,7 +36,6 @@ jobs:
             musl-tools \
             musl-dev \
             libasound2-dev \
-            libasound2-dev:arm64 \
             pkg-config
 
       - name: Set environment variables for cross-compilation
@@ -88,9 +87,6 @@ jobs:
           # Linux x86_64
           cargo build --release --target x86_64-unknown-linux-gnu
           
-          # Linux ARM64
-          cargo build --release --target aarch64-unknown-linux-gnu
-          
           # Windows x86_64
           cargo build --release --target x86_64-pc-windows-gnu
           
@@ -102,6 +98,9 @@ jobs:
           
           # Linux x86_64 musl (skip ALSA for musl build)
           ALSA_NO_PKG_CONFIG=1 cargo build --release --target x86_64-unknown-linux-musl
+          
+          # Linux ARM64 (skip ALSA for cross-compilation)
+          ALSA_NO_PKG_CONFIG=1 cargo build --release --target aarch64-unknown-linux-gnu
 
       - name: Create archives
         run: |

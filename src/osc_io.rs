@@ -56,19 +56,9 @@ impl OscServer {
         }
     }
 
-    pub fn listen(&mut self, sender: &Sender<u32>) -> u32 {
-        self.listen_and_stop(-1, sender) 
-    }
-
     // New method that accepts a running flag
     pub fn listen_with_interrupt(&mut self, sender: &Sender<u32>, running: Arc<AtomicBool>) -> u32 {
         self.listen_and_stop_with_interrupt(-1, sender, running)
-    }
-
-    pub fn listen_and_stop(&mut self, max_nr_of_messages: i32, sender: &Sender<u32>) -> u32 {
-        // Create a running flag that's always true for backwards compatibility
-        let running = Arc::new(AtomicBool::new(true));
-        self.listen_and_stop_with_interrupt(max_nr_of_messages, sender, running)
     }
 
     // Modified method that checks the running flag

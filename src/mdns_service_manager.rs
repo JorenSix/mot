@@ -3,6 +3,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+#[cfg(test)]
+use std::thread;
+
 /// A simple wrapper for mDNS service registration
 pub struct MdnsService {
     daemon: Arc<ServiceDaemon>,
@@ -127,24 +130,6 @@ impl MdnsService {
         Ok(())
     }
 
-    /// Run the service for a specified duration while monitoring the running flag
-    #[cfg(test)]
-    pub fn run_for_with_interrupt(
-        &mut self,
-        duration: Duration,
-        running: Arc<AtomicBool>
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let start_time = std::time::Instant::now();
-        
-        while running.load(Ordering::SeqCst) && start_time.elapsed() < duration {
-            thread::sleep(Duration::from_millis(10));
-        }
-        
-        // Unregister when done
-        self.unregister()?;
-        
-        Ok(())
-    }
 }
 
 impl Drop for MdnsService {
@@ -177,6 +162,6 @@ mod tests {
         });
         
         // This should stop when running becomes false
-        mdns.run_for_with_interrupt(Duration::from_secs(5), running).unwrap();
+        mdns.run_for_interrupt(Duration::from_secs(5), running).unwrap();
     }
 }
