@@ -17,10 +17,7 @@ jobs:
             archive: zip
           - target: x86_64-unknown-linux-musl
             archive: zip
-            pre_build: "apt-get update && apt-get install -y libasound2-dev pkg-config"
-          - target: x86_64-apple-darwin
-            archive: zip
-            macos_target: "10.12"
+            pre_build: "pre_build.sh"
     steps:
       - uses: actions/checkout@v4
       - name: Compile and release
