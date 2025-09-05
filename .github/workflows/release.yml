@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  release:
+  build-linux-windows:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -23,8 +23,6 @@ jobs:
             x86_64-unknown-linux-musl
             aarch64-unknown-linux-gnu
             x86_64-pc-windows-gnu
-            x86_64-apple-darwin
-            aarch64-apple-darwin
 
       - name: Install cross-compilation dependencies
         run: |
@@ -55,29 +53,7 @@ jobs:
           linker = "x86_64-w64-mingw32-gcc"
           EOF
 
-      - name: Install osxcross for macOS
-        run: |
-          git clone https://github.com/tpoechtrager/osxcross.git
-          cd osxcross
-          wget -nc https://github.com/joseluisq/macosx-sdks/releases/download/12.3/MacOSX12.3.sdk.tar.xz
-          mv MacOSX12.3.sdk.tar.xz tarballs/
-          UNATTENDED=yes OSX_VERSION_MIN=10.7 ./build.sh
-          echo "$(pwd)/target/bin" >> $GITHUB_PATH
-
-      - name: Configure macOS cross-compilation
-        run: |
-          cat >> ~/.cargo/config.toml << EOF
-          
-          [target.x86_64-apple-darwin]
-          linker = "x86_64-apple-darwin21.4-clang"
-          ar = "x86_64-apple-darwin21.4-ar"
-          
-          [target.aarch64-apple-darwin]
-          linker = "aarch64-apple-darwin21.4-clang"
-          ar = "aarch64-apple-darwin21.4-ar"
-          EOF
-
-      - name: Build for all targets
+      - name: Build for Linux and Windows targets
         run: |
           # Set PKG_CONFIG environment for cross-compilation
           export PKG_CONFIG_ALLOW_CROSS=1
@@ -90,19 +66,13 @@ jobs:
           # Windows x86_64
           cargo build --release --target x86_64-pc-windows-gnu
           
-          # macOS x86_64
-          cargo build --release --target x86_64-apple-darwin
-          
-          # macOS ARM64 (Apple Silicon)
-          cargo build --release --target aarch64-apple-darwin
-          
           # Linux x86_64 musl (skip ALSA for musl build)
           ALSA_NO_PKG_CONFIG=1 cargo build --release --target x86_64-unknown-linux-musl
           
           # Linux ARM64 (skip ALSA for cross-compilation)
           ALSA_NO_PKG_CONFIG=1 cargo build --release --target aarch64-unknown-linux-gnu
 
-      - name: Create archives
+      - name: Create Linux and Windows archives
         run: |
           mkdir -p releases
           
@@ -117,12 +87,70 @@ jobs:
           
           # Windows x86_64 - zip format
           zip -j releases/mot_windows.zip target/x86_64-pc-windows-gnu/release/mot.exe
+
+      - name: Upload Linux and Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-windows-binaries
+          path: releases/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: |
+            x86_64-apple-darwin
+            aarch64-apple-darwin
+
+      - name: Build for macOS targets
+        run: |
+          # macOS x86_64
+          cargo build --release --target x86_64-apple-darwin
+          
+          # macOS ARM64 (Apple Silicon)
+          cargo build --release --target aarch64-apple-darwin
+
+      - name: Create macOS archives
+        run: |
+          mkdir -p releases
           
           # macOS x86_64 - zip format
           zip -j releases/mot_macos.zip target/x86_64-apple-darwin/release/mot
           
           # macOS ARM64 (Apple Silicon) - zip format
           zip -j releases/mot_macos_arm64.zip target/aarch64-apple-darwin/release/mot
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binaries
+          path: releases/
+
+  create-release:
+    needs: [build-linux-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p releases
+          find artifacts -name "*.zip" | while read file; do
+            cp "$file" releases/
+          done
           
           # List created files for debugging
           ls -la releases/
