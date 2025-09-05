@@ -15,9 +15,6 @@ jobs:
         include:
           - target: x86_64-pc-windows-gnu
             archive: zip
-          - target: x86_64-unknown-linux-musl
-            archive: zip
-            pre_build: "pre_build.sh"
     steps:
       - uses: actions/checkout@v4
       - name: Compile and release
