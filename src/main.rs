@@ -1,6 +1,7 @@
 mod mdns_service_manager;
 mod midi_io;
 mod osc_io;
+mod lua_processor;
 
 use clap::{Arg, Command};
 use osc_io::OscSender;
@@ -244,6 +245,62 @@ impl MidiToOsc {
     }
 }
 
+struct LuaMidiProcessor {
+    midi_in: midi_io::MidiIn,
+    midi_out: midi_io::MidiOut,
+    lua_processor: lua_processor::LuaProcessor,
+    verbose: bool,
+}
+
+impl LuaMidiProcessor {
+    fn new(
+        midi_in_port_index: usize,
+        midi_out_port_index: usize,
+        lua_script_path: &str,
+        verbose: bool,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(LuaMidiProcessor {
+            midi_in: midi_io::MidiIn::new(midi_in_port_index),
+            midi_out: midi_io::MidiOut::new(midi_out_port_index),
+            lua_processor: lua_processor::LuaProcessor::new(lua_script_path)?,
+            verbose,
+        })
+    }
+
+    fn process_midi(mut self) {
+        let mut message_count = 0;
+        
+        self.midi_in.listen(
+            move |_timestamp, message, _| {
+                message_count += 1;
+                
+                if self.verbose {
+                    println!("Received MIDI message #{}: {:?}", message_count, message);
+                }
+                
+                // Process through Lua script
+                match self.lua_processor.process_message(message) {
+                    Ok(Some(processed_message)) => {
+                        if self.verbose {
+                            println!("Sending processed message: {:?}", processed_message);
+                        }
+                        self.midi_out.send_full(&processed_message);
+                    }
+                    Ok(None) => {
+                        if self.verbose {
+                            println!("Message filtered by Lua script");
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Lua processing error: {}", e);
+                    }
+                }
+            },
+            (),
+        );
+    }
+}
+
 fn is_host_with_port(v: &str) -> Result<String, String> {
     let addr = SocketAddrV4::from_str(v);
     match addr {
@@ -330,7 +387,7 @@ fn setup_interrupt_handler() -> Arc<AtomicBool> {
 fn main() {
     let matches = Command::new("mot")
         .bin_name("mot")
-        .version("0.1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("Joren Six. <joren.six@ugent.be>")
         .about("mot - Midi and OSC Tools")
         .subcommand_required(true)
@@ -431,6 +488,32 @@ fn main() {
                 .default_value("0")
                 .value_parser(clap::value_parser!(usize))
                 .help("MIDI output device index. List the devices to get the correct index."))
+        )
+        .subcommand(Command::new("midi_processor")
+            .about("Process MIDI messages through a Lua script")
+            .arg(Arg::new("verbose")
+                .short('v')
+                .num_args(0)
+                .required(false)
+                .help("print debug information verbosely"))
+            .arg(Arg::new("list")
+                .short('l')
+                .num_args(0)
+                .required(false)
+                .help("list midi input and output devices"))
+            .arg(Arg::new("midi_input_index")
+                .default_value("0")
+                .value_parser(clap::value_parser!(usize))
+                .help("MIDI input device index. List the devices to get the correct index."))
+            .arg(Arg::new("midi_output_index")
+                .default_value("0")
+                .value_parser(clap::value_parser!(usize))
+                .help("MIDI output device index. List the devices to get the correct index."))
+            .arg(Arg::new("script")
+                .short('s')
+                .long("script")
+                .required_unless_present("list")
+                .help("Path to the Lua script file"))
         ).get_matches();
     
     let running = setup_interrupt_handler();
@@ -566,6 +649,40 @@ fn main() {
                 && midi_io::MidiOut::check_midi_output_port_index(midi_output_index)
             {
                 MidiRoundTrip::new(midi_input_index, midi_output_index).respond_to_midi();
+            }
+        }
+    }
+
+    if let Some(sub_matches) = matches.subcommand_matches("midi_processor") {
+        if sub_matches.value_source("list") == Some(clap::parser::ValueSource::CommandLine) {
+            midi_io::MidiIn::list_midi_input_ports();
+            midi_io::MidiOut::list_midi_output_ports();
+        } else {
+            let midi_input_index: usize = *sub_matches
+                .get_one("midi_input_index")
+                .expect("`midi_input_index` is required");
+            let midi_output_index: usize = *sub_matches
+                .get_one("midi_output_index")
+                .expect("`midi_output_index` is required");
+            let script_path = sub_matches.get_one::<String>("script").unwrap();
+            let verbose = 
+                sub_matches.value_source("verbose") == Some(clap::parser::ValueSource::CommandLine);
+            
+            println!("MIDI Processor");
+            println!("Loading Lua script: {}", script_path);
+            
+            if midi_io::MidiIn::check_midi_input_port_index(midi_input_index)
+                && midi_io::MidiOut::check_midi_output_port_index(midi_output_index)
+            {
+                match LuaMidiProcessor::new(midi_input_index, midi_output_index, script_path, verbose) {
+                    Ok(processor) => {
+                        println!("Lua script loaded successfully. Processing MIDI...");
+                        processor.process_midi();
+                    }
+                    Err(e) => {
+                        eprintln!("Error loading Lua script: {}", e);
+                    }
+                }
             }
         }
     }

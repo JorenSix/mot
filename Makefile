@@ -5,8 +5,9 @@ run:
 release:
 	cargo build --release
 
+# for macos aarch64, adapt as needed
 install:
-	sudo cp target/aarch64-apple-darwin/release/mot /usr/local/bin
+	sudo cp target/release/mot /usr/local/bin
 
 macos_aarch:
 	#rustup target add aarch64-apple-darwin
