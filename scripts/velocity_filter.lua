@@ -12,7 +12,7 @@ end
 
 function process_midi(message)
     if #message == 0 then
-        return nil
+        return {}  -- Return empty array to filter
     end
     
     local status = message[1]
@@ -24,12 +24,12 @@ function process_midi(message)
         
         -- Filter out notes below threshold
         if velocity <= VELOCITY_THRESHOLD then
-            return nil
+            return {}  -- Return empty array to filter
         end
     end
     
-    -- Pass through the message
-    return message
+    -- Pass through the message in array format
+    return {message}
 end
 
 print("Velocity filter loaded - threshold: " .. VELOCITY_THRESHOLD)

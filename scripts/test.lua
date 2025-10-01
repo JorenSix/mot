@@ -28,7 +28,7 @@ end
 function process_midi(message)
     if #message == 0 then
         print("Warning: Empty message received")
-        return nil
+        return {}  -- Return empty array to filter
     end
     
     message_count = message_count + 1
@@ -63,8 +63,8 @@ function process_midi(message)
             message_count, status))
     end
     
-    -- Pass through all messages unchanged
-    return message
+    -- Pass through all messages unchanged in array format
+    return {message}
 end
 
 print("==============================================")

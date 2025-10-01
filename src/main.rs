@@ -280,15 +280,18 @@ impl LuaMidiProcessor {
                 
                 // Process through Lua script
                 match self.lua_processor.process_message(message) {
-                    Ok(Some(processed_message)) => {
-                        if self.verbose {
-                            println!("Sending processed message: {:?}", processed_message);
-                        }
-                        self.midi_out.send_full(&processed_message);
-                    }
-                    Ok(None) => {
-                        if self.verbose {
-                            println!("Message filtered by Lua script");
+                    Ok(processed_messages) => {
+                        if processed_messages.is_empty() {
+                            if self.verbose {
+                                println!("Message filtered by Lua script");
+                            }
+                        } else {
+                            for processed_message in processed_messages {
+                                if self.verbose {
+                                    println!("Sending processed message: {:?}", processed_message);
+                                }
+                                self.midi_out.send_full(&processed_message);
+                            }
                         }
                     }
                     Err(e) => {

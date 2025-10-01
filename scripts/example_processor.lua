@@ -19,12 +19,13 @@ end
 
 -- Main processing function
 -- This function receives a MIDI message as a table of bytes
--- Return nil to filter (block) the message
--- Return a table of bytes to send the processed message
+-- Return {} (empty array) to filter (block) the message
+-- Return {{message}} (array with single message) to send one processed message
+-- Return {{msg1}, {msg2}, ...} (array of messages) to send multiple messages
 function process_midi(message)
     -- Ensure we have at least one byte
     if #message == 0 then
-        return nil
+        return {}  -- Filter empty messages
     end
     
     local status = message[1]
@@ -32,7 +33,7 @@ function process_midi(message)
     local channel = get_channel(status)
     
     -- Example 1: Pass through all messages unchanged
-    -- return message
+    -- return {message}
     
     -- Example 2: Transpose notes up by one octave
     if msg_type == NOTE_ON or msg_type == NOTE_OFF then
@@ -45,37 +46,37 @@ function process_midi(message)
             
             -- Make sure note is in valid MIDI range (0-127)
             if new_note <= 127 then
-                return {status, new_note, velocity}
+                return {{status, new_note, velocity}}  -- Return single message in array
             else
                 -- Filter out notes that would go out of range
-                return nil
+                return {}  -- Return empty array to filter
             end
         end
     end
     
     -- Example 3: Filter by channel (only pass channel 0)
     -- if channel == 0 then
-    --     return message
+    --     return {message}
     -- else
-    --     return nil
+    --     return {}  -- Filter
     -- end
     
     -- Example 4: Remap MIDI channels (shift all messages from channel 0 to channel 1)
     -- if channel == 0 then
     --     local new_status = (status & 0xF0) | 1  -- Keep message type, set channel to 1
     --     message[1] = new_status
-    --     return message
+    --     return {message}
     -- end
     
     -- Example 5: Filter out note-off messages, pass everything else
     -- if msg_type == NOTE_OFF then
-    --     return nil
+    --     return {}  -- Filter
     -- else
-    --     return message
+    --     return {message}
     -- end
     
     -- For all other messages, pass through unchanged
-    return message
+    return {message}
 end
 
 -- Optional: Print script info when loaded

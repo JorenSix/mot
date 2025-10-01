@@ -20,8 +20,8 @@ impl LuaProcessor {
     }
     
     /// Process a MIDI message through the Lua script
-    /// Returns the processed MIDI message, or None if the message should be filtered
-    pub fn process_message(&self, message: &[u8]) -> LuaResult<Option<Vec<u8>>> {
+    /// Returns a vector of processed MIDI messages (can be empty, single, or multiple messages)
+    pub fn process_message(&self, message: &[u8]) -> LuaResult<Vec<Vec<u8>>> {
         // Get the process_midi function from Lua
         let process_fn: LuaFunction = self.lua.globals().get("process_midi")?;
         
@@ -36,18 +36,49 @@ impl LuaProcessor {
         
         // Handle the result
         match result {
-            LuaValue::Nil => Ok(None), // Filter the message
+            LuaValue::Nil => Ok(Vec::new()), // Filter the message (return empty array)
             LuaValue::Table(table) => {
-                // Convert Lua table back to Vec<u8>
-                let mut output = Vec::new();
-                for pair in table.pairs::<usize, u8>() {
-                    let (_key, value) = pair?;
-                    output.push(value);
+                // Check if this is an array of messages or a single message
+                // If first element is a number, it's a single MIDI message
+                // If first element is a table, it's an array of messages
+                
+                let first_value: LuaValue = table.get(1)?;
+                
+                match first_value {
+                    LuaValue::Integer(_) | LuaValue::Number(_) => {
+                        // Single MIDI message: {status, data1, data2, ...}
+                        let mut output = Vec::new();
+                        for pair in table.pairs::<usize, u8>() {
+                            let (_key, value) = pair?;
+                            output.push(value);
+                        }
+                        Ok(vec![output])
+                    }
+                    LuaValue::Table(_) => {
+                        // Array of MIDI messages: {{status, data1, data2}, {status, data1, data2}, ...}
+                        let mut messages = Vec::new();
+                        for pair in table.pairs::<usize, LuaTable>() {
+                            let (_key, msg_table) = pair?;
+                            let mut output = Vec::new();
+                            for msg_pair in msg_table.pairs::<usize, u8>() {
+                                let (_msg_key, value) = msg_pair?;
+                                output.push(value);
+                            }
+                            messages.push(output);
+                        }
+                        Ok(messages)
+                    }
+                    LuaValue::Nil => {
+                        // Empty table, return empty array
+                        Ok(Vec::new())
+                    }
+                    _ => Err(LuaError::RuntimeError(
+                        "process_midi must return nil, a table of bytes, or an array of byte tables".to_string(),
+                    )),
                 }
-                Ok(Some(output))
             }
             _ => Err(LuaError::RuntimeError(
-                "process_midi must return nil or a table of bytes".to_string(),
+                "process_midi must return nil, a table of bytes, or an array of byte tables".to_string(),
             )),
         }
     }

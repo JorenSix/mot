@@ -10,7 +10,7 @@ end
 
 function process_midi(message)
     if #message == 0 then
-        return nil
+        return {}  -- Return empty array to filter
     end
     
     local status = message[1]
@@ -23,7 +23,7 @@ function process_midi(message)
         message[1] = new_status
     end
     
-    return message
+    return {message}  -- Return in array format
 end
 
 print(string.format("Channel router loaded - mapping channel %d to channel %d", 

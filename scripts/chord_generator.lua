@@ -16,7 +16,7 @@ local active_chords = {}
 
 function process_midi(message)
     if #message < 3 then
-        return message
+        return {message}  -- Return single message in array
     end
     
     local status = message[1]
@@ -38,12 +38,12 @@ function process_midi(message)
         -- Store chord for later note-off
         active_chords[root_note] = chord_notes
         
-        -- Return just the root note (other notes would need separate MIDI messages)
-        -- In a real implementation, you'd send multiple messages
-        -- For now, return the first chord note
-        if #chord_notes > 0 then
-            return {status, chord_notes[1], velocity}
+        -- Return multiple MIDI messages, one for each chord note
+        local messages = {}
+        for i, note in ipairs(chord_notes) do
+            table.insert(messages, {status, note, velocity})
         end
+        return messages
         
     elseif msg_type == NOTE_OFF or (msg_type == NOTE_ON and velocity == 0) then
         -- Generate note-off for the chord
@@ -51,18 +51,19 @@ function process_midi(message)
             local chord_notes = active_chords[root_note]
             active_chords[root_note] = nil
             
-            if #chord_notes > 0 then
-                -- Return note-off for first chord note
-                local note_off_status = (msg_type == NOTE_OFF) and status or (NOTE_OFF | (status & 0x0F))
-                return {note_off_status, chord_notes[1], velocity}
+            -- Return note-off messages for all chord notes
+            local messages = {}
+            local note_off_status = (msg_type == NOTE_OFF) and status or (NOTE_OFF | (status & 0x0F))
+            for i, note in ipairs(chord_notes) do
+                table.insert(messages, {note_off_status, note, velocity})
             end
+            return messages
         end
     end
     
-    -- Pass through other messages
-    return message
+    -- Pass through other messages in array format
+    return {message}
 end
 
 print("Chord generator loaded - converts single notes to major triads")
-print("Note: Due to MIDI message structure, this sends only the root note.")
-print("For full chords, you'd need to generate multiple MIDI messages per input.")
+print("Now generates multiple MIDI messages per input note!")

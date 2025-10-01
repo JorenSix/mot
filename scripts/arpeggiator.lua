@@ -35,7 +35,7 @@ end
 
 function process_midi(message)
     if #message < 3 then
-        return message
+        return {message}  -- Return in array format
     end
     
     local status = message[1]
@@ -51,10 +51,10 @@ function process_midi(message)
         if #held_notes > 0 then
             arp_index = (arp_index % #held_notes) + 1
             local arp_note = held_notes[arp_index]
-            return {status, arp_note, velocity}
+            return {{status, arp_note, velocity}}  -- Return single message in array
         end
         
-        return nil  -- Filter original note
+        return {}  -- Filter original note (empty array)
         
     elseif msg_type == NOTE_OFF or (msg_type == NOTE_ON and velocity == 0) then
         -- Note off: remove from held notes
@@ -65,11 +65,11 @@ function process_midi(message)
             arp_index = 0
         end
         
-        return nil  -- Filter note-off messages
+        return {}  -- Filter note-off messages (empty array)
     end
     
-    -- Pass through other messages
-    return message
+    -- Pass through other messages in array format
+    return {message}
 end
 
 print("Arpeggiator loaded - plays held notes in sequence")
