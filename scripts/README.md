@@ -43,12 +43,12 @@ Process MIDI messages in real-time using Lua scripts!
 
 2. List available MIDI devices:
    ```bash
-   ./target/release/mot lua_process -l
+   mot midi_processor -l
    ```
 
 3. Run with a Lua script:
    ```bash
-   ./target/release/mot lua_process \
+   mot midi_processor \
      --midi_input_index 0 \
      --midi_output_index 6666 \
      --script example_processor.lua \
@@ -58,7 +58,7 @@ Process MIDI messages in real-time using Lua scripts!
 ## Usage
 
 ```bash
-mot lua_process [OPTIONS] --script <SCRIPT>
+mot midi_processor [OPTIONS] --script <SCRIPT>
 ```
 
 ### Options
@@ -200,29 +200,29 @@ cargo build --release
 ### Run with examples
 ```bash
 # List MIDI devices
-./target/release/mot lua_process -l
+mot midi_processor -l
 
 # Basic passthrough
-./target/release/mot lua_process \
+mot midi_processor \
   --midi_input_index 0 \
   --midi_output_index 0 \
   --script passthrough.lua
 
 # Transpose with virtual output port
-./target/release/mot lua_process \
+mot midi_processor \
   --midi_input_index 0 \
   --midi_output_index 6666 \
   --script example_processor.lua \
   -v
 
 # Filter by velocity
-./target/release/mot lua_process \
+mot midi_processor \
   --midi_input_index 0 \
   --midi_output_index 0 \
   --script velocity_filter.lua
 
 # Route channels
-./target/release/mot lua_process \
+mot midi_processor \
   --midi_input_index 0 \
   --midi_output_index 0 \
   --script channel_router.lua
